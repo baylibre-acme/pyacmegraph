@@ -1,5 +1,5 @@
 # pyacmegraph
-ACME power probe capture and analysis tool
+[ACME](http://baylibre.com/acme) power probe capture and analysis tool
 
 ![pageres](media/pyacmegraph-sample01.png)
 
@@ -8,6 +8,8 @@ ACME power probe capture and analysis tool
  - computes and displays Power consumption and Vbat with multiple zoom capabilities
  - basic stats (mean on Power, Vbat, distribution graph)
  - save captured data for later visualization (view mode), save as text and image
+
+**Please submit bugs or feature requests using this project [Issues](https://github.com/baylibre-acme/pyacmegraph/issues) tracking.**
 
 # Usage
 ## Examples
