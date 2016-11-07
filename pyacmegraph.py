@@ -682,7 +682,7 @@ p0hist.setMouseEnabled(x=True, y=False)
 p1 = pg.PlotWidget()
 l.addWidget(p1, 2, 1)
 p1.setDownsampling(ds=True, auto=True, mode='peak')
-p1.setClipToView(True)
+p1.setClipToView(False)
 p1.setMouseEnabled(x=True, y=False)
 pi1 = p1.plotItem
 p1ybis = pg.ViewBox()
