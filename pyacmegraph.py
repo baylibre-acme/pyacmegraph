@@ -191,20 +191,6 @@ class deviceThread(threading.Thread):
             print "Using shunt value: %dmOhms" % (self.rshunt)
             print " ===================== "
 
-    def setintegrationtime(self, int_time):
-        # configuring channels for this device
-        for k, v in cdict.items():
-            ch = self.dev.find_channel(v)
-            if (ch):
-                if args.verbose >= 1:
-                    print "Found %s channel: %s (%s)" % (k, ch.id, ch.attrs['index'].value)
-                if (enadict.get(k)):
-                    if (ch.attrs.get("integration_time")):
-                        ch.attrs.get("integration_time").value = int_time
-                    ch.enabled = True
-                # print ch.scan_element
-                # print ch.attrs
-
     def run(self):
         self.buf = iio.Buffer(self.dev, self.buffer_size)
         if args.verbose >= 1:
@@ -232,7 +218,6 @@ class deviceThread(threading.Thread):
                     self.abs_start_time = val_time[0]
                 val_time = val_time - self.abs_start_time
 
-            # val_time = val_time - val_time[0]
             # convert time from ns to ms (requires conversion from int to float - makes a table copy...)
             val_time = val_time.astype(float) / 1000000
 
@@ -300,12 +285,6 @@ class deviceThread(threading.Thread):
             if self.first_run:
                 self.first_run = False
 
-def print_time(thread_name, delay, counter):
-    while counter:
-        time.sleep(delay)
-        print "%s: %s" % (thread_name, time.ctime(time.time()))
-        counter -= 1
-
 
 if not args.load:
     print "Connecting with ACME..."
@@ -358,7 +337,6 @@ if not args.load:
         threads.append(thread)
         databufs.append({'gdata' : np.empty((0,3)), 'deviceid' : d.id, 'devicename' : d.name})
         thread_id += 1
-        # dev = ctx.devices[0]
     # print databufs
     # sys.exit()
 
@@ -767,14 +745,6 @@ p1meanI = 0
 p1meanP = 0
 p1period = 0
 
-def getIndexOfTuple(l, index, value):
-    for pos,t in enumerate(l):
-        if t[index] == value:
-            return pos
-
-    # Matches behavior of list.index
-    raise ValueError("list.index(x): x not in list")
-
 # redraw p1 if user did modify region (only if display is frozen)
 def update_region():
     global data1, p1meanI, p1meanP, p1period
@@ -1016,13 +986,13 @@ else:
     timer.start(int(pt.child('Capture control', 'plot rate (ms)').value()))
     if args.template:
         if args.verbose >= 1:
-            print "Setting parameters from saved /acme file..."
+            print "Setting parameters from saved .acme file..."
         pt.restoreState(dispvars['ptree'], addChildren=False, blockSignals=False)
         if args.verbose >= 1:
             print "Completed parameters setup"
         # Init passed, exit tmpl setup phase
         tmpl_setup = False
-        # clear buffers to start clen (may have changed Rshunt)
+        # clear buffers to start clean (may have changed Rshunt)
         reinit_buffers()
 
 ## Start Qt event loop unless running in interactive mode or using pyside.
