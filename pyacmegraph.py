@@ -62,6 +62,8 @@ parser.add_argument('--ip', help='IP address of ACME')
 parser.add_argument('--shunts',
                     help='''list of shunts to use in mOhms (comma separated list,
                         one shunt value per channel, starting at channel 0) Ex: 100,50,250''')
+parser.add_argument('--vbat', type=float, help=''' Force a constant Vbat value (in Volts)
+                    to be used for computing power, in place of ACME measured vbat''')
 parser.add_argument('--verbose', '-v', action='count',
                     help='print debug traces (various levels v, vv, vvv)')
 
@@ -222,13 +224,18 @@ class deviceThread(threading.Thread):
             val_time = val_time.astype(float) / 1000000
 
             # Read channels and compute power on this bufer
-            vbat = self.crdict.get("Vbat").read(self.buf)
-            unpack_str = 'h' * (len(vbat) / struct.calcsize('h'))
-            val_vbat = struct.unpack(unpack_str, vbat)
-            val_vbat = np.asarray(val_vbat) * self.scaledict.get("Vbat")
             vshunt = self.crdict.get("Vshunt").read(self.buf)
+            unpack_str = 'h' * (len(vshunt) / struct.calcsize('h'))
             val_vshunt = struct.unpack(unpack_str, vshunt)
             val_vshunt = np.asarray(val_vshunt) * self.scaledict.get("Vshunt")
+            if enadict.get('Vbat') == True:
+                vbat = self.crdict.get("Vbat").read(self.buf)
+                val_vbat = struct.unpack(unpack_str, vbat)
+                val_vbat = np.asarray(val_vbat) * self.scaledict.get("Vbat")
+            else:
+                # Use fixed value instead
+                val_vbat = np.full(len(val_vshunt), int(args.vbat * 1000), dtype=int)
+
             # compute power using minimal data (Vbat and Vshunt - we know Rshunt)
             val_power = (val_vshunt * val_vbat) / (self.rshunt * 1000)
 
@@ -285,6 +292,10 @@ class deviceThread(threading.Thread):
             if self.first_run:
                 self.first_run = False
 
+
+if args.vbat:
+    print("Do not measure Vbat from ACME, and use a fixed Vbat value (%.3fV) to measure power" % (args.vbat))
+    enadict['Vbat'] = False
 
 if not args.load:
     print "Connecting with ACME..."
@@ -363,7 +374,6 @@ if args.template:
     dispvars = pickle.load(pkl_file)
     pkl_file.close()
     tmpl_setup = True
-
 
 ## Switch to using white background and black foreground
 pg.setConfigOption('background', 'w')
