@@ -64,6 +64,8 @@ parser.add_argument('--shunts',
                         one shunt value per channel, starting at channel 0) Ex: 100,50,250''')
 parser.add_argument('--vbat', type=float, help=''' Force a constant Vbat value (in Volts)
                     to be used for computing power, in place of ACME measured vbat''')
+parser.add_argument('--ishunt', action='store_true',
+                    help='Display Ishunt instead of Power')
 parser.add_argument('--verbose', '-v', action='count',
                     help='print debug traces (various levels v, vv, vvv)')
 
@@ -105,6 +107,15 @@ dispvars = {}
 # state variable for initializing parameters from external file (template feature)
 tmpl_setup = False
 
+# Display power by default, but can display Ishunt alternatively (must be selected before init)
+dispvars['display Ishunt'] = False
+
+# default strings for displaying captured data (default Power, but can be changed to Ishunt)
+dispstr = {}
+dispstr['pwr_ishunt_str'] = "Power (mW)"
+dispstr['pwr_plot_str'] = "Power plot"
+dispstr['pwr_color_str'] = "Power color"
+
 # Handle a device (setup channels), retrieve and format data and store them into data buffer
 # Then the main thread can read from data to plot it.
 # The global data_thread_lock lock shall be used when accessing data.
@@ -118,7 +129,7 @@ class deviceThread(threading.Thread):
     estimated_freq = 0
     shunt_override = False
 
-    def __init__(self, thread_id, dev, rshunt, ndevices):
+    def __init__(self, thread_id, dev, rshunt, ndevices, ishunt=False):
 
         threading.Thread.__init__(self)
         self.thread_id = thread_id
@@ -126,6 +137,7 @@ class deviceThread(threading.Thread):
         self.ndevices = ndevices
         self.data = np.empty((0,3))
         self.sample_period_stats = np.empty(0)
+        self.ishunt = ishunt
         print "Configuring new device %d of %d. Name: %s ; id: %s" %(thread_id + 1, ndevices, dev.name, dev.id)
         # set oversampling for max perfs (4 otherwise)
         dev.attrs['in_oversampling_ratio'].value = in_oversampling_ratio
@@ -236,8 +248,12 @@ class deviceThread(threading.Thread):
                 # Use fixed value instead
                 val_vbat = np.full(len(val_vshunt), int(args.vbat * 1000), dtype=int)
 
-            # compute power using minimal data (Vbat and Vshunt - we know Rshunt)
-            val_power = (val_vshunt * val_vbat) / (self.rshunt * 1000)
+            if self.ishunt:
+                # Compute Ishunt (in mA) instead of power
+                val_power = val_vshunt / self.rshunt
+            else:
+                # compute power using minimal data (Vbat and Vshunt - we know Rshunt)
+                val_power = (val_vshunt * val_vbat) / (self.rshunt * 1000)
 
             if args.verbose >= 3:
                 print "<%s>  Time (ns => ms) -------------------- " % (self.dev.id)
@@ -246,7 +262,10 @@ class deviceThread(threading.Thread):
                 print val_vbat
                 print "<%s>  Vshunt (uV) -------------------- " % (self.dev.id)
                 print val_vshunt
-                print "<%s>  Power -------------------- " % (self.dev.id)
+                if self.ishunt:
+                    print "<%s>  Ishunt (mA) -------------------- " % (self.dev.id)
+                else:
+                    print "<%s>  Power -------------------- " % (self.dev.id)
                 print val_power
 
             data_thread_lock.acquire()
@@ -297,6 +316,42 @@ if args.vbat:
     print("Do not measure Vbat from ACME, and use a fixed Vbat value (%.3fV) to measure power" % (args.vbat))
     enadict['Vbat'] = False
 
+def setup_ishunt():
+    global dispstr
+    dispstr['pwr_ishunt_str'] = 'Ishunt (mA)'
+    dispstr['pwr_plot_str'] = 'Ishunt plot'
+    dispstr['pwr_color_str'] = 'Ishunt color'
+    dispvars['display Ishunt'] = True
+
+if args.ishunt:
+    if not args.load and not args.template:
+        setup_ishunt()
+    else:
+        print("Ignoring ishunt option (using settings from loaded acme file)")
+
+if args.load:
+    print "Reading %s file..." % (args.load)
+    pkl_file = open(args.load, 'rb')
+    dispvars = pickle.load(pkl_file)
+    databufs = pickle.load(pkl_file)
+    if args.verbose >=  2:
+        print "Loaded data:"
+        print databufs
+    pkl_file.close()
+
+if args.template:
+    print "Reading %s file..." % (args.template)
+    pkl_file = open(args.template, 'rb')
+    dispvars = pickle.load(pkl_file)
+    pkl_file.close()
+    tmpl_setup = True
+
+if dispvars['display Ishunt'] == True:
+    # May have loaded Ishunt setup from file, so make sure to apply to it
+    # to capture and / or menus
+    args.ishunt = True
+    setup_ishunt()
+
 if not args.load:
     print "Connecting with ACME..."
     # IIO inits
@@ -344,7 +399,7 @@ if not args.load:
     threads = []
     thread_id = 0
     for d in ctx.devices:
-        thread = deviceThread(thread_id, d, shunts[thread_id], len(ctx.devices))
+        thread = deviceThread(thread_id, d, shunts[thread_id], len(ctx.devices), args.ishunt)
         threads.append(thread)
         databufs.append({'gdata' : np.empty((0,3)), 'deviceid' : d.id, 'devicename' : d.name})
         thread_id += 1
@@ -358,22 +413,6 @@ if not args.load:
         thread.start()
 
 
-if args.load:
-    print "Reading %s file..." % (args.load)
-    pkl_file = open(args.load, 'rb')
-    dispvars = pickle.load(pkl_file)
-    databufs = pickle.load(pkl_file)
-    if args.verbose >=  2:
-        print "Loaded data:"
-        print databufs
-    pkl_file.close()
-
-if args.template:
-    print "Reading %s file..." % (args.template)
-    pkl_file = open(args.template, 'rb')
-    dispvars = pickle.load(pkl_file)
-    pkl_file.close()
-    tmpl_setup = True
 
 ## Switch to using white background and black foreground
 pg.setConfigOption('background', 'w')
@@ -388,7 +427,7 @@ win.setLayout(l)
 # Add configuration display
 params_template = {'name': '', 'type': 'group', 'children': [
         {'name': 'Label', 'type': 'str', 'value': ""},
-        {'name': '', 'type': 'bool', 'value': True, 'tip': "click to display this device power plot"},
+        {'name': '', 'type': 'bool', 'value': True, 'tip': "click to display this device " + dispstr['pwr_plot_str']},
         {'name': 'Color', 'type': 'color', 'value': "FF0", 'tip': "This is a color button"},
         {'name': '', 'type': 'bool', 'value': False, 'tip': "click to display this device Vbat plot"},
         {'name': 'Color', 'type': 'color', 'value': "FF0", 'tip': "This is a color button"},
@@ -403,9 +442,9 @@ for i, t in enumerate(databufs):
     # label for convenience
     params[0]['children'][i]['children'][0]['name'] = 'label, ' + str(i)
     # pwr plot enable
-    params[0]['children'][i]['children'][1]['name'] = 'Power Plot, ' + str(i)
+    params[0]['children'][i]['children'][1]['name'] = dispstr['pwr_plot_str'] + ', ' + str(i)
     # pwr plot color
-    params[0]['children'][i]['children'][2]['name'] = 'Power color, ' + str(i)
+    params[0]['children'][i]['children'][2]['name'] = dispstr['pwr_color_str'] + ', ' + str(i)
     params[0]['children'][i]['children'][2]['value'] = colors[i]
     # vbat plot enable
     params[0]['children'][i]['children'][3]['name'] = 'Vbat Plot, ' + str(i)
@@ -472,7 +511,7 @@ params.append(mousep)
 zoomp_mean_tmpl = {'name': 'Float', 'type': 'float', 'value': 0, 'step': 0.001, 'readonly': True}
 zoomp = {'name': 'Zoom plot', 'type': 'group', 'children': [
         {'name': 'width (ms)', 'type': 'float', 'value': 0, 'readonly': True},
-        {'name': 'Mean Power (mW)', 'type': 'group', 'children': []},
+        {'name': 'Mean ' + dispstr['pwr_ishunt_str'], 'type': 'group', 'children': []},
     ]}
 for t in databufs:
     m = copy.deepcopy(zoomp_mean_tmpl)
@@ -549,7 +588,7 @@ def change(param, changes):
             if param.name().find('color') != -1:
                 field, index = param.name().split(',')
                 index = int(index)
-                if field == 'Power color':
+                if field == dispstr['pwr_color_str']:
                     if type(data) is str:
                         col = data
                     elif type(data) is tuple:
@@ -561,7 +600,7 @@ def change(param, changes):
                         # we go a PyQt4.QtGui.QColor object
                         col = str(data.name())
                     if args.verbose >= 2:
-                        print "setting power plot color of device %d to: %s" % (index, col)
+                        print "setting " + dispstr['pwr_plot_str'] + " color of device %d to: %s" % (index, col)
                     colors[index] = col
                 if field == 'Vbat color':
                     if type(data) is str:
@@ -634,7 +673,7 @@ def change(param, changes):
                     if filename:
                         for i, t in enumerate(databufs):
                             name = filename + "-ch" + str(i) + ".csv"
-                            np.savetxt(name, t['gdata'], delimiter=",", header="Time (ms), Power (mW), Vbat (mV)")
+                            np.savetxt(name, t['gdata'], delimiter=",", header="Time (ms), " + dispstr['pwr_ishunt_str'] + ", Vbat (mV)")
                             if args.verbose >= 1:
                                 print "Saving channel %d to %s file" % (i, name)
             elif param.name() == 'Save to picture':
@@ -837,7 +876,7 @@ def update_zoomp():
         # print "range: %d, %d" % (gdata[:,0].searchsorted(minX), gdata[:,0].searchsorted(maxX))
         # print "gdata : ", gdata.shape
         mean = gdata[gdata[:,0].searchsorted(minX):gdata[:,0].searchsorted(maxX), 1].mean(0)
-        pt.child('Zoom plot', 'Mean Power (mW)', 'm:' + t['deviceid']).setValue(mean)
+        pt.child('Zoom plot', 'Mean ' + dispstr['pwr_ishunt_str'], 'm:' + t['deviceid']).setValue(mean)
 
 # Update vbat mean computation area fields
 def update_vbatm():
@@ -879,7 +918,7 @@ def display_histogram():
     ## Using stepMode=True causes the plot to draw two lines for each sample.
     ## notice that len(x) == len(y)+1
     p0hist.plot(x, y, stepMode=True, fillLevel=0, brush=(0,128,128,150), clear=True)
-    p0hist.setLabels(bottom='Power (mW)')
+    p0hist.setLabels(bottom=dispstr['pwr_ishunt_str'])
     # p1hist.plot(x[0:len(y)], y, clear=True)
 
 
@@ -923,7 +962,7 @@ def updateplots(forcezoom=False):
     for i, t in enumerate(databufs):
         gdata = t['gdata']
         # p1, p2: plot all data and set visible range
-        if pt.child('Devices', t['deviceid'] + " (" + t['devicename'] + ")", 'Power Plot, ' + str(i)).value():
+        if pt.child('Devices', t['deviceid'] + " (" + t['devicename'] + ")", dispstr['pwr_plot_str'] + ', ' + str(i)).value():
             p1.plot(gdata[:,[0,1]], pen=colors[i])
             p2.plot(gdata[:,[0,1]], pen=colors[i])
         if pt.child('Devices', t['deviceid'] + " (" + t['devicename'] + ")", 'Vbat Plot, ' + str(i)).value():
@@ -931,9 +970,9 @@ def updateplots(forcezoom=False):
             p2ybis.addItem(pg.PlotCurveItem(gdata[:,0], gdata[:,2], pen = vbat_colors[i]))
 
     p0hist.enableAutoRange('y')
-    p1.setLabels(left='Power (mW)', bottom='Time (ms)', right="Vbat (mV)")
+    p1.setLabels(left=dispstr['pwr_ishunt_str'], bottom='Time (ms)', right="Vbat (mV)")
     p1.enableAutoRange('y')
-    p2.setLabels(left='Power (mW)', bottom='Time (ms)', right="Vbat (mV)")
+    p2.setLabels(left=dispstr['pwr_ishunt_str'], bottom='Time (ms)', right="Vbat (mV)")
     p2.addItem(region, ignoreBounds=True)
     p2.enableAutoRange('y')
 
