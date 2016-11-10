@@ -47,6 +47,10 @@ optional arguments:
   --shunts SHUNTS     list of shunts to use in mOhms (comma separated list,
                       one shunt value per channel, starting at channel 0) Ex:
                       100,50,250
+  --vbat VBAT         Force a constant Vbat value (in Volts) to be used for
+                      computing power, in place of ACME measured vbat
+  --ishunt            Display Ishunt instead of Power (do not capture Vbat and
+                      do not compute Power
   --verbose, -v       print debug traces (various levels v, vv, vvv)
 
 This tools captures exclusively Vbat and Vshunt values from ACME probes. Using Rshunt
@@ -61,6 +65,10 @@ Example usage:
 ### Prerequisites
  - Python 2.7
  - ACME board running a recent distro with iio
+ See here for IIO capable SW release:
+ - [pre-built image with IIO](http://wiki.baylibre.com/doku.php?id=acme:start#pre-built_sdcard_images)
+or
+ - [building the SW with IIO](http://wiki.baylibre.com/doku.php?id=acme:start#building_the_software_with_iio)
 
 ### Installing on Linux
 
