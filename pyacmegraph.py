@@ -129,7 +129,7 @@ class deviceThread(threading.Thread):
     estimated_freq = 0
     shunt_override = False
 
-    def __init__(self, thread_id, dev, rshunt, ndevices, ishunt=False):
+    def __init__(self, thread_id, dev, rshunt, ndevices, enadict, vbat=0, ishunt=False):
 
         threading.Thread.__init__(self)
         self.thread_id = thread_id
@@ -137,6 +137,8 @@ class deviceThread(threading.Thread):
         self.ndevices = ndevices
         self.data = np.empty((0,3))
         self.sample_period_stats = np.empty(0)
+        self.enadict = enadict
+        self.vbat = vbat
         self.ishunt = ishunt
         print "Configuring new device %d of %d. Name: %s ; id: %s" %(thread_id + 1, ndevices, dev.name, dev.id)
         # set oversampling for max perfs (4 otherwise)
@@ -153,7 +155,7 @@ class deviceThread(threading.Thread):
             if (ch):
                 if args.verbose >= 1:
                     print "Found %s channel: %s (%s)" % (k, ch.id, ch.attrs['index'].value)
-                if (enadict.get(k)):
+                if (self.enadict.get(k)):
                     if ch.attrs.get('scale'):
                         scale = float(ch.attrs.get('scale').value)
                         if k == "Time":
@@ -240,13 +242,13 @@ class deviceThread(threading.Thread):
             unpack_str = 'h' * (len(vshunt) / struct.calcsize('h'))
             val_vshunt = struct.unpack(unpack_str, vshunt)
             val_vshunt = np.asarray(val_vshunt) * self.scaledict.get("Vshunt")
-            if enadict.get('Vbat') == True:
+            if self.enadict.get('Vbat') == True:
                 vbat = self.crdict.get("Vbat").read(self.buf)
                 val_vbat = struct.unpack(unpack_str, vbat)
                 val_vbat = np.asarray(val_vbat) * self.scaledict.get("Vbat")
             else:
                 # Use fixed value instead
-                val_vbat = np.full(len(val_vshunt), int(args.vbat * 1000), dtype=int)
+                val_vbat = np.full(len(val_vshunt), int(self.vbat * 1000), dtype=int)
 
             if self.ishunt:
                 # Compute Ishunt (in mA) instead of power
@@ -399,7 +401,8 @@ if not args.load:
     threads = []
     thread_id = 0
     for d in ctx.devices:
-        thread = deviceThread(thread_id, d, shunts[thread_id], len(ctx.devices), args.ishunt)
+        thread = deviceThread(thread_id, d, shunts[thread_id], len(ctx.devices),
+                            enadict, args.vbat, args.ishunt)
         threads.append(thread)
         databufs.append({'gdata' : np.empty((0,3)), 'deviceid' : d.id, 'devicename' : d.name})
         thread_id += 1
