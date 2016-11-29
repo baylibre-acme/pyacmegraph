@@ -8,12 +8,7 @@ capabilities, as well as some computation features.
 import numpy as np
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtGui, QtCore
-from pyqtgraph.Point import Point
-import pyqtgraph.widgets.RemoteGraphicsView
-import pyqtgraph.parametertree.parameterTypes as pTypes
-from pyqtgraph.parametertree import Parameter, ParameterTree, ParameterItem, registerParameterType
-import datetime
-import textwrap
+from pyqtgraph.parametertree import Parameter, ParameterTree
 import iio
 import sys
 import argparse
@@ -34,8 +29,8 @@ in_oversampling_ratio = "1"
 max_freq = 800  # experimental max sampling freq limit because if I2C link (in Hz)
 
 parser = argparse.ArgumentParser(description='ACME measurements capture and display tool.',
-                    formatter_class=argparse.RawDescriptionHelpFormatter,
-                    epilog='''
+                                 formatter_class=argparse.RawDescriptionHelpFormatter,
+                                 epilog='''
 This tools captures exclusively Vbat and Vshunt values from ACME probes. Using Rshunt
 (auto-detected or forced), it computes and displays the resulting power (Vbat*Vshunt/Rshunt).
 Capture settings are automatically setup to optimize sampling resolution, but can be overriden.
@@ -128,19 +123,19 @@ class deviceThread(threading.Thread):
     sample_period_stats_mean = 0
     estimated_freq = 0
     shunt_override = False
+    buf = None
 
-    def __init__(self, thread_id, dev, rshunt, ndevices, enadict, vbat=0, ishunt=False):
+    def __init__(self, threadid, dev, rshunt, ndevices, enadict, vbat=0, ishunt=False):
 
         threading.Thread.__init__(self)
-        self.thread_id = thread_id
         self.dev = dev
         self.ndevices = ndevices
-        self.data = np.empty((0,3))
+        self.data = np.empty((0, 3))
         self.sample_period_stats = np.empty(0)
         self.enadict = enadict
         self.vbat = vbat
         self.ishunt = ishunt
-        print "Configuring new device %d of %d. Name: %s ; id: %s" %(thread_id + 1, ndevices, dev.name, dev.id)
+        print "Configuring new device %d of %d. Name: %s ; id: %s" %(threadid + 1, ndevices, dev.name, dev.id)
         # set oversampling for max perfs (4 otherwise)
         dev.attrs['in_oversampling_ratio'].value = in_oversampling_ratio
 
@@ -152,10 +147,10 @@ class deviceThread(threading.Thread):
         # configuring channels for this device
         for k, v in cdict.items():
             ch = dev.find_channel(v)
-            if (ch):
+            if ch:
                 if args.verbose >= 1:
                     print "Found %s channel: %s (%s)" % (k, ch.id, ch.attrs['index'].value)
-                if (self.enadict.get(k)):
+                if self.enadict.get(k):
                     if ch.attrs.get('scale'):
                         scale = float(ch.attrs.get('scale').value)
                         if k == "Time":
@@ -165,7 +160,7 @@ class deviceThread(threading.Thread):
                     self.scaledict[k] = scale
                     if args.verbose >= 1:
                         print "   scale: %f" % (scale)
-                    if (ch.attrs.get("integration_time")):
+                    if ch.attrs.get("integration_time"):
                         # change integration time for max capture rate
                         ch.attrs.get("integration_time").value = integration_time
                     if args.verbose >= 1:
@@ -186,7 +181,7 @@ class deviceThread(threading.Thread):
         # Adjust buffer size based on expected frequency
         # size buffer to store 0.5s if possible
         buffer_size = int(self.sampling_freq / 2)
-        if (buffer_size < 64):
+        if buffer_size < 64:
             buffer_size = 64
         if args.verbose >= 1:
             print "Adjusted buffer size to %d samples" % (buffer_size)
@@ -194,7 +189,7 @@ class deviceThread(threading.Thread):
         if rshunt == 0:
             # no override value passed, try to get it from device
             if dev.attrs.get("in_shunt_resistor"):
-                rshunt =  int(int(dev.attrs['in_shunt_resistor'].value) / 1000)
+                rshunt = int(int(dev.attrs['in_shunt_resistor'].value) / 1000)
                 if args.verbose >= 1:
                     print "Reading shunt value from device: %dmOhms" % rshunt
         else:
@@ -274,25 +269,25 @@ class deviceThread(threading.Thread):
             # Try to detect discontinuities
             if not self.first_run:
                 # Compute buffer time since last buffer
-                last_buf_time = val_time[0] - self.data[self.data.shape[0] - 1,0]
+                last_buf_time = val_time[0] - self.data[self.data.shape[0] - 1, 0]
                 # trigger a warning if last time buffer is longer than 6 expected periods
                 if last_buf_time > 6 * 1000/self.sampling_freq:
                     missed_samples = int((last_buf_time * self.sampling_freq) / 1000)
                     print "<%s> ** Warning: data overflow (and loss - %d samples) suspected!" % (self.dev.id, missed_samples)
-                    print "<%s> ** last buf: %f, new buf: %f, diff(ms): %f, period (ms): %f" %(self.dev.id, self.data[self.data.shape[0] - 1,0], val_time[0], last_buf_time, 1000/self.sampling_freq)
+                    print "<%s> ** last buf: %f, new buf: %f, diff(ms): %f, period (ms): %f" %(self.dev.id, self.data[self.data.shape[0] - 1, 0], val_time[0], last_buf_time, 1000/self.sampling_freq)
             ti_iioextract = time.time()
 
             # add new captured points to table
             tmp = self.data
             self.data = np.empty((self.data.shape[0] + self.buffer_size, 3))
             self.data[:tmp.shape[0]] = tmp
-            self.data[tmp.shape[0]:,0] = val_time
-            self.data[tmp.shape[0]:,1] = val_power
-            self.data[tmp.shape[0]:,2] = val_vbat
+            self.data[tmp.shape[0]:, 0] = val_time
+            self.data[tmp.shape[0]:, 1] = val_power
+            self.data[tmp.shape[0]:, 2] = val_vbat
             data_thread_lock.release()
             ti_cpdata = time.time()
 
-            estimated_freq = (1000 * self.buffer_size) / (val_time[val_time.shape[0] -1 ] - val_time[0])
+            estimated_freq = (1000 * self.buffer_size) / (val_time[val_time.shape[0] - 1 ] - val_time[0])
             if args.verbose >= 2:
                 print "<%s>  iiorefill: %f; iioextract: %f; cpdata: %f; total: %f; (since last: %f) Freq: %.1fHz" % \
             (self.dev.id, ti_iiorefill - ti_start, ti_iioextract - ti_iiorefill, ti_cpdata - ti_iioextract, \
@@ -319,7 +314,6 @@ if args.vbat:
     enadict['Vbat'] = False
 
 def setup_ishunt():
-    global dispstr
     dispstr['pwr_ishunt_str'] = 'Ishunt (mA)'
     dispstr['pwr_plot_str'] = 'Ishunt plot'
     dispstr['pwr_color_str'] = 'Ishunt color'
@@ -336,7 +330,7 @@ if args.load:
     pkl_file = open(args.load, 'rb')
     dispvars = pickle.load(pkl_file)
     databufs = pickle.load(pkl_file)
-    if args.verbose >=  2:
+    if args.verbose >= 2:
         print "Loaded data:"
         print databufs
     pkl_file.close()
@@ -358,7 +352,7 @@ if not args.load:
     print "Connecting with ACME..."
     # IIO inits
     try:
-        if (args.ip):
+        if args.ip:
             print "  Connecting with IP address: ", args.ip
             ctx = iio.Context("ip:" + args.ip)
         else:
@@ -559,14 +553,13 @@ except:
     sys.exit()
 
 def reinit_buffers():
-    global threads, data_thread_lock
     data_thread_lock.acquire()
     for t in threads:
         t.data = np.empty((0, 3))
         t.first_run = True
     data_thread_lock.release()
 
-def tree_trace_param(path, data):
+def tree_trace_param(param, path, data):
     if args.verbose >= 2:
         print path
         if path is not None:
@@ -579,7 +572,6 @@ def tree_trace_param(path, data):
 
 ## If anything changes in the tree, print a message
 def change(param, changes):
-    global threads, data_thread_lock, timer
     # print("tree changes:")
     for param, change, data in changes:
         path = pt.childPath(param)
@@ -587,7 +579,7 @@ def change(param, changes):
         if not path:
             break
         if path[0] == 'Devices':
-            tree_trace_param(path, data)
+            tree_trace_param(param, path, data)
             if param.name().find('color') != -1:
                 field, index = param.name().split(',')
                 index = int(index)
@@ -619,19 +611,19 @@ def change(param, changes):
                     if args.verbose >= 2:
                         print "setting vbat plot color of device %d to: %s" % (index, col)
                     vbat_colors[index] = col
-            tree_trace_param(path, data)
+            tree_trace_param(param, path, data)
             updateplots()
         elif path[0] == 'Distribution plot':
             display_histogram()
-            tree_trace_param(path, data)
+            tree_trace_param(param, path, data)
         elif path[0] == 'Zoom plot':
             if param.name() == 'Vbat enabled':
                 updateplots()
-                tree_trace_param(path, data)
+                tree_trace_param(param, path, data)
         elif path[0] == 'Capture control':
             if len(path) > 1:
                 if path[1] == 'Rshunts (mOhms)':
-                    tree_trace_param(path, data)
+                    tree_trace_param(param, path, data)
                     if param.name().find('Rshunt,') != -1:
                         field, index = param.name().split(',')
                         index = int(index)
@@ -656,7 +648,7 @@ def change(param, changes):
                 if args.verbose >= 2:
                     print "changing timer interval to:", int(data)
                 timer.setInterval(int(data))
-                tree_trace_param(path, data)
+                tree_trace_param(param, path, data)
         elif path[0] == 'File operations':
             if param.name() == 'Save to binary (.acme)':
                 name = QtGui.QFileDialog.getSaveFileName(caption='Save captured data as binary file', filter="ACME captures .acme (*.acme)")
@@ -694,8 +686,6 @@ def change(param, changes):
 pt.sigTreeStateChanged.connect(change)
 
 def savedatatofile(filename):
-    global databufs
-
     output = open(filename, 'wb')
     print "trying to save..."
     dispvars['zoom range'] = region.getRegion()
@@ -773,7 +763,7 @@ win.resize(1280,768)
 # Create selec-able region in intermediate zoom area
 region = pg.LinearRegionItem()
 region.setZValue(10)
-# Add the LinearRegionItem to the ViewBox, but tell the ViewBox to exclude this 
+# Add the LinearRegionItem to the ViewBox, but tell the ViewBox to exclude this
 # item when doing auto-range calculations.
 
 # Create selec-able region in global area
@@ -799,8 +789,6 @@ p1period = 0
 
 # redraw p1 if user did modify region (only if display is frozen)
 def update_region():
-    global data1, p1meanI, p1meanP, p1period
-
     if checkfreeze.isChecked():
         region.setZValue(10)
         minX, maxX = region.getRegion()
@@ -814,7 +802,6 @@ region.sigRegionChanged.connect(update_region)
 
 # update region display in p2 if user changed zoom level in p1
 def updateRegion(window, viewRange):
-    global region, checkfreeze
     if checkfreeze.isChecked():
         rgn = viewRange[0]
         region.setRegion(rgn)
@@ -837,7 +824,6 @@ def update_mouse_coords(mousepoint):
         pt.child('Mouse pointer', "p:" + t['deviceid']).setValue(power)
 
 def mouseMovedp0(evt):
-    global p0hist
     pt.child('Mouse pointer', 'time').setValue(0)
     if not pt.child('Distribution plot', 'Dist enable').value():
         for t in databufs:
@@ -853,13 +839,11 @@ def mouseMovedp0(evt):
             pt.child('Mouse pointer', "p:" + t['deviceid']).setValue(0)
 
 def mouseMovedp1(evt):
-    global p1
     pos = evt[0]  ## using signal proxy turns original arguments into a tuple
     mousePoint = p1.getPlotItem().getViewBox().mapSceneToView(pos)
     update_mouse_coords(mousePoint)
 
 def mouseMovedp2(evt):
-    global p2
     pos = evt[0]  ## using signal proxy turns original arguments into a tuple
     mousePoint = p2.getPlotItem().getViewBox().mapSceneToView(pos)
     update_mouse_coords(mousePoint)
@@ -896,7 +880,6 @@ def update_vbatm():
         pt.child('Zoom plot', 'Mean Vbat (mV)', 'v:' + t['deviceid']).setValue(mean)
 
 def display_histogram():
-    global region, threads, databufs, p0hist, l, plot_index
     if not pt.child('Distribution plot', 'Dist enable').value():
         p0hist.clear()
         return
@@ -928,7 +911,6 @@ def display_histogram():
 ## Handle view resizing
 def updatep1Views():
     ## view has resized; update auxiliary views to match
-    global pi1, p1ybis
     p1ybis.setGeometry(pi1.vb.sceneBoundingRect())
 
     ## need to re-update linked axes since this was called
@@ -940,7 +922,6 @@ pi1.vb.sigResized.connect(updatep1Views)
 
 def updatep2Views():
     ## view has resized; update auxiliary views to match
-    global pi2, p2ybis
     p2ybis.setGeometry(pi2.vb.sceneBoundingRect())
 
     ## need to re-update linked axes since this was called
@@ -995,7 +976,6 @@ def updateplots(forcezoom=False):
 
 
 def update_display():
-    global p1ybis
     ti_start = time.time()
     if threads[0].first_run:
         # avoid boarder effects with plots if tables are empty
