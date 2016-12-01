@@ -65,10 +65,10 @@ Example usage:
 ### Prerequisites
  - Python 2.7
  - ACME board running a recent distro with iio
- See here for IIO capable SW release:
- - [pre-built image with IIO](http://wiki.baylibre.com/doku.php?id=acme:start#pre-built_sdcard_images)
+ See here for latest IIO capable SW release:
+ - [pre-built image with IIO](https://github.com/baylibre-acme/ACME/releases)
 or
- - [building the SW with IIO](http://wiki.baylibre.com/doku.php?id=acme:start#building_the_software_with_iio)
+ - [building the SW with IIO](https://github.com/baylibre-acme/ACME)
 
 ### Installing on Linux
 
