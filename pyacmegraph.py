@@ -819,6 +819,7 @@ pi2.getAxis('right').linkToView(p2ybis)
 p2ybis.setXLink(pi2)
 
 # Setup stretch factors so that increasing window size does not change tree size but increases plots
+l.setColumnMinimumWidth(0, 300)
 l.setColumnStretch(0, 0)
 l.setColumnStretch(1, 1)
 win.show()
