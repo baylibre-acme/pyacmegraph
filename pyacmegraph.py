@@ -18,6 +18,9 @@ import time
 import os
 import copy
 import pickle
+import xmlrpc.client
+import types
+import re
 
 __license__ = "MIT"
 __status__ = "Development"
@@ -110,6 +113,34 @@ dispstr['pwr_ishunt_str'] = "Power (mW)"
 dispstr['pwr_plot_str'] = "Power plot"
 dispstr['pwr_color_str'] = "Power color"
 
+# Handle XMLRPC services related to an ACME device
+class acmeXmlrpc():
+
+    def __init__(self, address):
+        serveraddr = "%s:%d" % (address, 8000)
+        self.proxy = xmlrpc.client.ServerProxy("http://%s/acme" % serveraddr)
+        print self.proxy
+
+    # The info service provides informations not exposed through IIO
+    def info(self, index):
+        infod = { 'name': ''}
+        try:
+            info = self.proxy.info(index+1)
+        except:
+            if args.verbose >= 1:
+                print "No XMLRPC service found for this device"
+            return infod
+        if str(info).find('Has Power Switch') != -1:
+            infod['power switch'] = True
+        match = re.match(r'PowerProbe (.+) \(', str(info))
+        if match:
+            infod['name'] = match.group(1)
+        match = re.search(r'Serial Number: (\S+)', str(info))
+        if match:
+            infod['serial'] = match.group(1)
+
+        return infod
+
 # Handle a device (setup channels), retrieve and format data and store them into data buffer
 # Then the main thread can read from data to plot it.
 # The global data_thread_lock lock shall be used when accessing data.
@@ -123,8 +154,10 @@ class deviceThread(threading.Thread):
     estimated_freq = 0
     shunt_override = False
     buf = None
+    power_switch = False
+    meta = {}
 
-    def __init__(self, threadid, dev, rshunt, ndevices, enadict, vbat=0, ishunt=False):
+    def __init__(self, threadid, dev, rshunt, ndevices, enadict, vbat=0, ishunt=False, xmlrpc=None):
 
         threading.Thread.__init__(self)
         self.dev = dev
@@ -138,7 +171,7 @@ class deviceThread(threading.Thread):
         # set oversampling for max perfs (4 otherwise)
         dev.attrs['in_oversampling_ratio'].value = in_oversampling_ratio
 
-        if args.verbose >= 2:
+        if args.verbose >= 1:
             print "Showing attributes for %s" % (dev.id)
             for k, at in dev.attrs.items():
                 print "   %s (%s)" % (at.name, at.value)
@@ -199,6 +232,18 @@ class deviceThread(threading.Thread):
         self.rshunt = rshunt
         if args.verbose >= 1:
             print "Using shunt value: %dmOhms" % (self.rshunt)
+
+        # Checking other device information through XML-RPC (if available)
+        if type(xmlrpc) is not types.NoneType:
+            self.meta = xmlrpc.info(threadid)
+            if 'power switch' in self.meta:
+                self.power_switch = True
+            if args.verbose >= 1:
+                print("Probe related meta data:")
+                for key, elem in self.meta.items():
+                    print("  %s: %s" %(key, elem))
+
+        if args.verbose >= 1:
             print " ===================== "
 
     def run(self):
@@ -354,9 +399,11 @@ if not args.load:
         if args.ip:
             print "  Connecting with IP address: ", args.ip
             ctx = iio.Context("ip:" + args.ip)
+            acme_address = args.ip
         else:
             print "  Connecting using iio fallback (IIOD_REMOTE=<%s>)" % (os.environ['IIOD_REMOTE'])
             ctx = iio.Context()
+            acme_address = os.environ['IIOD_REMOTE']
     except:
         print "ERROR creating ACME iio context, aborting."
         sys.exit()
@@ -389,15 +436,19 @@ if not args.load:
     if args.verbose >= 2:
         print "  Using following shunts values, per device: ", shunts
 
+    # Try to use XMLRPC service with ACME
+    acme_xmlrpc = acmeXmlrpc(acme_address)
+
     # Create threads: 1 for each ACME detected device
     data_thread_lock = threading.Lock() # Lock used for any shared data buffer access
     threads = []
     thread_id = 0
     for d in ctx.devices:
         thread = deviceThread(thread_id, d, shunts[thread_id], len(ctx.devices),
-                            enadict, args.vbat, args.ishunt)
+                            enadict, args.vbat, args.ishunt, acme_xmlrpc)
         threads.append(thread)
-        databufs.append({'gdata' : np.empty((0,3)), 'deviceid' : d.id, 'devicename' : d.name})
+        databufs.append({'gdata' : np.empty((0,3)), 'deviceid' : d.id, 'devicename' : d.name,
+                        'name' : thread.meta['name']})
         thread_id += 1
     # print databufs
     # sys.exit()
@@ -437,6 +488,7 @@ for i, t in enumerate(databufs):
     params[0]['children'][i]['name'] = t['deviceid'] + " (" + t['devicename'] + ")"
     # label for convenience
     params[0]['children'][i]['children'][0]['name'] = 'label, ' + str(i)
+    params[0]['children'][i]['children'][0]['value'] = t['name']
     # pwr plot enable
     params[0]['children'][i]['children'][1]['name'] = dispstr['pwr_plot_str'] + ', ' + str(i)
     # pwr plot color
@@ -452,11 +504,13 @@ for i, t in enumerate(databufs):
 
 if not args.load:
     # Add capture related settings (button for re-starting the capture, ...)
+    devswitch_tmpl = {'name': '', 'type': 'bool', 'tip': 'Control ACME power switch for this device'}
     rshunt_tmpl = {'name': 'RshuntX', 'type': 'int', 'value': 10}
     smpl_period_tmpl = {'name': '', 'type': 'float', 'value': 0, 'readonly': True}
     est_freq_tmpl = {'name': '', 'type': 'int', 'value': 0, 'readonly': True}
     capturectrlb = {'name': 'Capture control', 'type': 'group', 'children': [
             {'name': 'Re-init buffers', 'type': 'action'},
+            {'name': 'Power-switches', 'type': 'group', 'children': []},
             {'name': 'plot rate (ms)', 'type': 'int', 'value': 500},
             {'name': 'Rshunts (mOhms)', 'type': 'group', 'children': []},
             {'name': 'Buffer period stats (ms)', 'type': 'group', 'children': []},
@@ -466,17 +520,22 @@ if not args.load:
             ]}
     freq_total = {'name': 'Total samples', 'type': 'int', 'value': 0, 'readonly': True}
     for i, t in enumerate(threads):
+        if t.power_switch and 'in_active' in t.dev.attrs:
+            ds = copy.deepcopy(devswitch_tmpl)
+            ds['name'] = 'Device, ' + str(i)
+            ds['value'] = t.dev.attrs['in_active'].value != '0'
+            capturectrlb['children'][1]['children'].append(ds)
         rs = copy.deepcopy(rshunt_tmpl)
         rs['name'] = 'Rshunt, ' + str(i)
         rs['value'] = t.rshunt
-        capturectrlb['children'][2]['children'].append(rs)
+        capturectrlb['children'][3]['children'].append(rs)
         per = copy.deepcopy(smpl_period_tmpl)
         per['name'] = "s:" + t.dev.id   # add heading 's' for 'sampling period'
-        capturectrlb['children'][3]['children'].append(per)
+        capturectrlb['children'][4]['children'].append(per)
         frq = copy.deepcopy(est_freq_tmpl)
         frq['name'] = "h:" + t.dev.id   # add heading 'h' for 'hertz'
-        capturectrlb['children'][4]['children'].append(frq)
-    capturectrlb['children'][4]['children'].append(freq_total)
+        capturectrlb['children'][5]['children'].append(frq)
+    capturectrlb['children'][5]['children'].append(freq_total)
     params.append(capturectrlb)
 
 # Add distribution graph settings
@@ -639,6 +698,12 @@ def change(param, changes):
                                 else:
                                     # Load shunt from parameter only if not overriden from command line
                                     pt.child('Capture control', 'Rshunts (mOhms)', 'Rshunt, ' + str(index)).setValue(threads[index].rshunt)
+                if path[1] == 'Power-switches':
+                    tree_trace_param(param, path, data)
+                    if param.name().find('Device') != -1:
+                        field, index = param.name().split(',')
+                        index = int(index)
+                        threads[index].dev.attrs['in_active'].value = str(int(data))
             if param.name() == 'Re-init buffers':
                 if args.verbose >= 2:
                     print "Re-init buffers!!!"
