@@ -145,21 +145,21 @@ class acmeXmlrpc():
 # Then the main thread can read from data to plot it.
 # The global data_thread_lock lock shall be used when accessing data.
 class deviceThread(threading.Thread):
-    crdict = {}
-    scaledict = {}
-    abs_start_time = 0
-    first_run = True
-    running = True
-    sample_period_stats_mean = 0
-    estimated_freq = 0
-    shunt_override = False
-    buf = None
-    power_switch = False
-    meta = {}
 
     def __init__(self, threadid, dev, rshunt, ndevices, enadict, vbat=0, ishunt=False, xmlrpc=None):
 
         threading.Thread.__init__(self)
+        self.crdict = {}
+        self.scaledict = {}
+        self.abs_start_time = 0
+        self.first_run = True
+        self.running = True
+        self.sample_period_stats_mean = 0
+        self.estimated_freq = 0
+        self.shunt_override = False
+        self.buf = None
+        self.power_switch = False
+        self.meta = {}
         self.dev = dev
         self.ndevices = ndevices
         self.data = np.empty((0, 3))
