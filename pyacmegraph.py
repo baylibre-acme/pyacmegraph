@@ -170,7 +170,8 @@ class deviceThread(threading.Thread):
         print "Configuring new device %d of %d. Name: %s ; id: %s" %(threadid + 1, ndevices, dev.name, dev.id)
         # set oversampling for max perfs (4 otherwise)
         dev.attrs['in_oversampling_ratio'].value = in_oversampling_ratio
-
+        # enforce synchronous reads
+        dev.attrs['in_allow_async_readout'].value = "0"
         if args.verbose >= 1:
             print "Showing attributes for %s" % (dev.id)
             for k, at in dev.attrs.items():
