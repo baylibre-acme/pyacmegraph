@@ -63,6 +63,9 @@ parser.add_argument('--vbat', type=float, help=''' Force a constant Vbat value (
                     to be used for computing power, in place of ACME measured vbat''')
 parser.add_argument('--ishunt', action='store_true',
                     help='Display Ishunt instead of Power')
+parser.add_argument('--forcevshuntscale', metavar='scale', nargs='?', default=0, type=float,
+                    help='''Override Vshunt scale value, and force application start even
+                    if identifying a Vshunt scaling problem''')
 parser.add_argument('--verbose', '-v', action='count',
                     help='print debug traces (various levels v, vv, vvv)')
 
@@ -188,6 +191,21 @@ class deviceThread(threading.Thread):
                         scale = float(ch.attrs.get('scale').value)
                         if k == "Time":
                             print "WARNING: scale on Time channel!!!"
+                        # Check Vshunt scale
+                        if k == "Vshunt" and scale != 0.0025:
+                            print("Error: suspicious scale value on Vshunt channel" \
+                                " (found %f instead of 0.0025 expected)!" % (scale))
+                            print("Measurements may be wrong! Check ACME file-system version." \
+                                    " (use --forcevshuntscale option to force app start)")
+                            if args.forcevshuntscale == 0:
+                                # argument not provided
+                                sys.exit(0)
+                        if k == "Vshunt" and args.forcevshuntscale != 0:
+                            if args.forcevshuntscale == None:
+                                print("Using default Vshunt scale value (%f)" % (scale))
+                            else:
+                                scale = args.forcevshuntscale
+                                print("Forcing Vshunt scale to %f"% (scale))
                     else:
                         scale = 1.0
                     self.scaledict[k] = scale

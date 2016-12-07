@@ -52,6 +52,9 @@ optional arguments:
                       computing power, in place of ACME measured vbat
   --ishunt            Display Ishunt instead of Power (do not capture Vbat and
                       do not compute Power
+  --forcevshuntscale [scale]
+                        Override Vshunt scale value, and force application
+                        start even if identifying a Vshunt scaling problem
   --verbose, -v       print debug traces (various levels v, vv, vvv)
 
 This tools captures exclusively Vbat and Vshunt values from ACME probes. Using Rshunt
