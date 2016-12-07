@@ -291,23 +291,24 @@ class deviceThread(threading.Thread):
                 val_vbat = np.full(len(val_vshunt), int(self.vbat * 1000), dtype=int)
 
             if self.ishunt:
-                # Compute Ishunt (in mA) instead of power
-                val_power = val_vshunt / self.rshunt
+                # Compute Ishunt (in mA : 1000x mV / mO) instead of power
+                val_power = (val_vshunt * 1000) / self.rshunt
             else:
                 # compute power using minimal data (Vbat and Vshunt - we know Rshunt)
-                val_power = (val_vshunt * val_vbat) / (self.rshunt * 1000)
+                # compute value in mW (mV x mV / mO)
+                val_power = (val_vshunt * val_vbat) / self.rshunt
 
             if args.verbose >= 3:
                 print "<%s>  Time (ns => ms) -------------------- " % (self.dev.id)
                 print val_time
                 print "<%s>  Vbat (mV) -------------------- " % (self.dev.id)
                 print val_vbat
-                print "<%s>  Vshunt (uV) -------------------- " % (self.dev.id)
+                print "<%s>  Vshunt (mV) -------------------- " % (self.dev.id)
                 print val_vshunt
                 if self.ishunt:
                     print "<%s>  Ishunt (mA) -------------------- " % (self.dev.id)
                 else:
-                    print "<%s>  Power -------------------- " % (self.dev.id)
+                    print "<%s>  Power (mW) -------------------- " % (self.dev.id)
                 print val_power
 
             data_thread_lock.acquire()
