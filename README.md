@@ -80,6 +80,7 @@ Install Python 2.7 and following python extensions: numpy, pyqt4, pyqtgraph. Ex.
 ```
 sudo apt-get install python-numpy python-qt4 python-pyqtgraph
 ```
+(for pyqtgraph debian package, you may need to install the related .deb from [pyqtgraph](http://www.pyqtgraph.org) website, or add the project-specific Debian repository)
 
 Get a recent version of [libiio](https://wiki.analog.com/resources/eval/user-guides/ad-fmcdaq2-ebz/software/linux/applications/libiio), build and install it on your host.
 
