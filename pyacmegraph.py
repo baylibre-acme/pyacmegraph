@@ -120,18 +120,43 @@ dispstr['pwr_color_str'] = "Power color"
 class acmeXmlrpc():
 
     def __init__(self, address):
+        self.setup = False
+        self.dev2phy = {}
         serveraddr = "%s:%d" % (address, 8000)
         self.proxy = xmlrpclib.ServerProxy("http://%s/acme" % serveraddr)
-        print self.proxy
+        # probe for each ACME Probe and generate a table linking physical Probe sockets
+        # with IIO devices
+        dev_index = 0
+        # support up to 8 probes
+        for i in range(1,9):
+            try:
+                info = self.proxy.info(i)
+            except:
+                if args.verbose >= 1:
+                    print "  No XMLRPC service found for this device"
+                return
+            if str(info).find('Failed') != -1:
+                # Probe socket no used
+                if args.verbose >= 2:
+                    print("  XMLRPC: Probe socket %d empty" % (i))
+            else:
+                if args.verbose >= 1:
+                    print("  XMLRPC: Probe socket %d CONNECTED (IIO:%d)" % (i, dev_index))
+                self.dev2phy[dev_index] = i
+                dev_index +=1
+        self.setup = True
 
     # The info service provides informations not exposed through IIO
     def info(self, index):
-        infod = { 'name': ''}
+        infod = {}
+        if not self.setup or index not in self.dev2phy:
+            return infod
+
         try:
-            info = self.proxy.info(index+1)
+            info = self.proxy.info(self.dev2phy[index])
         except:
             if args.verbose >= 1:
-                print "No XMLRPC service found for this device"
+                print "XMLRPC error"
             return infod
         if str(info).find('Has Power Switch') != -1:
             infod['power switch'] = True
@@ -257,13 +282,14 @@ class deviceThread(threading.Thread):
             self.meta = xmlrpc.info(threadid)
             if 'power switch' in self.meta:
                 self.power_switch = True
-            if args.verbose >= 1:
+            if args.verbose >= 1 and self.meta:
                 print("Probe related meta data:")
                 for key, elem in self.meta.items():
                     print("  %s: %s" %(key, elem))
-
+            if not "name" in self.meta:
+                self.meta['name'] = ''
         if args.verbose >= 1:
-            print " ===================== "
+            print "====================="
 
     def run(self):
         self.buf = iio.Buffer(self.dev, self.buffer_size)
