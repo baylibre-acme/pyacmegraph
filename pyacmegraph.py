@@ -18,7 +18,7 @@ import time
 import os
 import copy
 import pickle
-import xmlrpc.client
+import xmlrpclib
 import types
 import re
 
@@ -121,7 +121,7 @@ class acmeXmlrpc():
 
     def __init__(self, address):
         serveraddr = "%s:%d" % (address, 8000)
-        self.proxy = xmlrpc.client.ServerProxy("http://%s/acme" % serveraddr)
+        self.proxy = xmlrpclib.ServerProxy("http://%s/acme" % serveraddr)
         print self.proxy
 
     # The info service provides informations not exposed through IIO
