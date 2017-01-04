@@ -66,6 +66,8 @@ parser.add_argument('--ishunt', action='store_true',
 parser.add_argument('--forcevshuntscale', metavar='scale', nargs='?', default=0, type=float,
                     help='''Override Vshunt scale value, and force application start even
                     if identifying a Vshunt scaling problem''')
+parser.add_argument('--timeoffset', metavar='time', type=float, help='''Add an offset to displayed time
+                    (can be negative) in offline mode''')
 parser.add_argument('--verbose', '-v', action='count',
                     help='print debug traces (various levels v, vv, vvv)')
 
@@ -420,6 +422,17 @@ if args.load:
     pkl_file = open(args.load, 'rb')
     dispvars = pickle.load(pkl_file)
     databufs = pickle.load(pkl_file)
+    if args.timeoffset:
+        # update data points
+        for t in databufs:
+            gdata = t['gdata']
+            gdata[:,0] += args.timeoffset
+        # Update zoom window visible range
+        dispvars['zoom range'] = list(dispvars['zoom range'])
+        for i,t in enumerate(dispvars['zoom range']):
+            t += args.timeoffset
+            dispvars['zoom range'][i] = t
+
     if args.verbose >= 2:
         print "Loaded data:"
         print databufs
