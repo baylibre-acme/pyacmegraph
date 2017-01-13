@@ -815,14 +815,17 @@ def savedatatofile(filename):
     dispvars['ptree'] = pt.saveState()
     try:
         pickle.dump(dispvars, output, -1)
-        data_thread_lock.acquire()
+        if not args.load:
+            data_thread_lock.acquire()
         pickle.dump(databufs, output, -1)
     except:
-        data_thread_lock.release()
+        if not args.load:
+            data_thread_lock.release()
         return False
 
 
-    data_thread_lock.release()
+    if not args.load:
+        data_thread_lock.release()
     print "save done..."
 
     output.close()
