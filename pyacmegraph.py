@@ -626,11 +626,15 @@ zoomp_mean_tmpl = {'name': 'Float', 'type': 'float', 'value': 0, 'step': 0.001, 
 zoomp = {'name': 'Zoom plot', 'type': 'group', 'children': [
         {'name': 'width (ms)', 'type': 'float', 'value': 0, 'readonly': True},
         {'name': 'Mean ' + dispstr['pwr_ishunt_str'], 'type': 'group', 'children': []},
+        {'name': 'Mean Energy (J or Ws)', 'type': 'group', 'children': []},
     ]}
 for t in databufs:
     m = copy.deepcopy(zoomp_mean_tmpl)
     m['name'] = "m:" + t['deviceid']   # add heading 'm' for 'mean'
     zoomp['children'][1]['children'].append(m)
+    m = copy.deepcopy(zoomp_mean_tmpl)
+    m['name'] = "e:" + t['deviceid']   # add heading 'e' for 'energy'
+    zoomp['children'][2]['children'].append(m)
 
 # Add Mean Vbat (mV) computation
 vbat_mean_tmpl = {'name': 'Float', 'type': 'float', 'value': 0, 'step': 0.001, 'readonly': True}
@@ -991,6 +995,15 @@ def update_zoomp():
         # print "gdata : ", gdata.shape
         mean = gdata[gdata[:,0].searchsorted(minX):gdata[:,0].searchsorted(maxX), 1].mean(0)
         pt.child('Zoom plot', 'Mean ' + dispstr['pwr_ishunt_str'], 'm:' + t['deviceid']).setValue(mean)
+        # compute energy
+        tmpdata = gdata[gdata[:,0].searchsorted(minX):gdata[:,0].searchsorted(maxX), :]
+        energy = 0
+        for i,d in enumerate(tmpdata):
+            if i !=0:
+                energy += (tmpdata[i,0] - tmpdata[i-1,0]) * tmpdata[i, 1]
+        energy = energy / 1000000  # account for ms and mW
+        pt.child('Zoom plot', 'Mean Energy (J or Ws)', 'e:' + t['deviceid']).setValue(energy)
+        # print("  Energy:%f" %(energy))
 
 # Update vbat mean computation area fields
 def update_vbatm():
