@@ -75,6 +75,8 @@ args = parser.parse_args()
 if args.verbose >= 3:
     print "args: ", args
 
+dir = os.path.dirname(__file__)
+
 if args.oversmplrt and args.oversmplrt > 0:
     in_oversampling_ratio = str(args.oversmplrt)
 
@@ -850,6 +852,13 @@ l.addWidget(p0hist, 1, 1)
 p0hist.setMouseEnabled(x=True, y=False)
 # p0hist.setVisible(False)
 
+# Display watermark
+p0watermark = pg.ViewBox()
+img = pg.QtGui.QGraphicsPixmapItem(pg.QtGui.QPixmap(os.path.join(dir, "media", "baylibre.png")))
+p0watermark.addItem(img)
+p0watermark.invertY(True)
+p0hist.scene().addItem(p0watermark)
+
 # zoom and real-time capture area
 p1 = pg.PlotWidget()
 l.addWidget(p1, 2, 1)
@@ -1070,6 +1079,15 @@ def updatep2Views():
     p2ybis.linkedViewChanged(pi2.vb, p2ybis.XAxis)
 
 pi2.vb.sigResized.connect(updatep2Views)
+
+def updatewatermarkview():
+    ## view has resized; update watermark position
+    # Move watermark to top right of plot window
+    p0watermark.setGeometry(p0hist.geometry().width() - 300,0, 250+40, 84+23)
+
+p0hist.plotItem.vb.sigResized.connect(updatewatermarkview)
+
+updatewatermarkview()
 
 def updateplots(forcezoom=False):
     p1.clear()
