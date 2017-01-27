@@ -28,7 +28,9 @@ pyacmegraph.py --ip myacme.local --load capture.acme
 ```
 usage: pyacmegraph.py [-h] [--load file] [--template file] [--inttime [value]]
                       [--oversmplrt value] [--norelatime] [--ip IP]
-                      [--shunts SHUNTS] [--verbose]
+                      [--shunts SHUNTS] [--vbat VBAT] [--ishunt]
+                      [--forcevshuntscale [scale]] [--timeoffset time]
+                      [--verbose]
 
 ACME measurements capture and display tool.
 
@@ -53,8 +55,10 @@ optional arguments:
   --ishunt            Display Ishunt instead of Power (do not capture Vbat and
                       do not compute Power
   --forcevshuntscale [scale]
-                        Override Vshunt scale value, and force application
-                        start even if identifying a Vshunt scaling problem
+                      Override Vshunt scale value, and force application
+                      start even if identifying a Vshunt scaling problem
+  --timeoffset time   Add an offset to displayed time (can be negative) in
+                      offline mode
   --verbose, -v       print debug traces (various levels v, vv, vvv)
 
 This tools captures exclusively Vbat and Vshunt values from ACME probes. Using Rshunt
@@ -62,6 +66,7 @@ This tools captures exclusively Vbat and Vshunt values from ACME probes. Using R
 Capture settings are automatically setup to optimize sampling resolution, but can be overriden.
 Example usage:
 ./pyacmegraph.py --ip baylibre-acme.local --shunts=100,50,250 -v
+./pyacmegraph.py --load capture.acme --timeoffset -10253
 ```
 
 ## Getting Started
