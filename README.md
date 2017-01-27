@@ -17,10 +17,10 @@
 ```
 pyacmegraph.py --ip <ip address or network name of the ACME board>
 
-pyacmegraph.py --ip myacme.local --load capture.acme
+pyacmegraph.py --load capture.acme
    => starts in display mode (no capture), loads and displays data from capture.acme file
 
-pyacmegraph.py --ip myacme.local --load capture.acme
+pyacmegraph.py --ip myacme.local --template capture.acme
    => Captures data, but initializes parameters from capture.acme file
 ```
 
