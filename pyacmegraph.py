@@ -134,7 +134,7 @@ class acmeXmlrpc():
         # support up to 8 probes
         for i in range(1,9):
             try:
-                info = self.proxy.info(i)
+                info = self.proxy.info("%s" % i)
             except:
                 if args.verbose >= 1:
                     print "  No XMLRPC service found for this device"
@@ -157,7 +157,7 @@ class acmeXmlrpc():
             return infod
 
         try:
-            info = self.proxy.info(self.dev2phy[index])
+            info = self.proxy.info("%s" % self.dev2phy[index])
         except:
             if args.verbose >= 1:
                 print "XMLRPC error"
