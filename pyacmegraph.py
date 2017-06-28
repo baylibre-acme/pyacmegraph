@@ -102,6 +102,7 @@ plots_indexes = {   'time' : 0,
 
 colors = [ "#0088FF", "#FF5500", "#449900", "#AA00AA", "#4444FF", "#994400", "#99AA00", "#990000" ]
 vbat_colors = [ "#55CCFF", "#FFAA55", "#88DD00", "#FF00FF", "#9999FF", "#DD8833", "#DDFF00", "#FF3333" ]
+mean_colors = [ "#0044AA", "#AA1100", "#005500", "#660066", "#0000AA", "#550000", "#556600", "#550000" ]
 
 # table containing all data for all channels
 databufs = []
@@ -195,6 +196,7 @@ class deviceThread(threading.Thread):
         self.dev = dev
         self.ndevices = ndevices
         self.data = np.empty((0, 3))
+        self.meandata = np.empty((0, 2))
         self.sample_period_stats = np.empty(0)
         self.enadict = enadict
         self.vbat = vbat
@@ -378,8 +380,14 @@ class deviceThread(threading.Thread):
             self.data[tmp.shape[0]:, 0] = val_time
             self.data[tmp.shape[0]:, 1] = val_power
             self.data[tmp.shape[0]:, 2] = val_vbat
+            # Compute and store power mean value on received buffer
+            self.meandata = np.append(self.meandata, [[ (val_time[0] + val_time[-1])/2, val_power.mean() ]], axis=0)
             data_thread_lock.release()
             ti_cpdata = time.time()
+            if args.verbose >= 3:
+                print "<%s>  mean power (mW) -------------------- " % (self.dev.id)
+                print self.meandata.shape
+                print self.meandata
 
             estimated_freq = (1000 * self.buffer_size) / (val_time[val_time.shape[0] - 1 ] - val_time[0])
             if args.verbose >= 2:
@@ -435,6 +443,12 @@ if args.load:
             t += args.timeoffset
             dispvars['zoom range'][i] = t
 
+    # Keep backward compatibility with files without added fields
+    for i, t in enumerate(databufs):
+        if 'mdata' not in t:
+            if args.verbose >= 2:
+                print "mdata not found, creating it"
+            t['mdata'] = np.empty((0,2))
     if args.verbose >= 2:
         print "Loaded data:"
         print databufs
@@ -508,7 +522,7 @@ if not args.load:
         thread = deviceThread(thread_id, d, shunts[thread_id], len(ctx.devices),
                             enadict, args.vbat, args.ishunt, acme_xmlrpc)
         threads.append(thread)
-        databufs.append({'gdata' : np.empty((0,3)), 'deviceid' : d.id, 'devicename' : d.name,
+        databufs.append({'gdata' : np.empty((0,3)), 'mdata' : np.empty((0,2)), 'deviceid' : d.id, 'devicename' : d.name,
                         'name' : thread.meta['name']})
         thread_id += 1
     # print databufs
@@ -562,6 +576,7 @@ for i, t in enumerate(databufs):
     params[0]['children'][i]['children'][4]['value'] = vbat_colors[i]
     # print params
     # print "----"
+params[0]['children'].append({'name': 'Mean plot', 'type': 'bool', 'value': False})
 
 if not args.load:
     # Add capture related settings (button for re-starting the capture, ...)
@@ -679,6 +694,7 @@ def reinit_buffers():
     data_thread_lock.acquire()
     for t in threads:
         t.data = np.empty((0, 3))
+        t.meandata = np.empty((0, 2))
         t.first_run = True
     data_thread_lock.release()
 
@@ -1103,10 +1119,13 @@ def updateplots(forcezoom=False):
 
     for i, t in enumerate(databufs):
         gdata = t['gdata']
+        mdata = t['mdata']
         # p1, p2: plot all data and set visible range
         if pt.child('Devices', t['deviceid'] + " (" + t['devicename'] + ")", dispstr['pwr_plot_str'] + ', ' + str(i)).value():
             p1.plot(gdata[:,[0,1]], pen=colors[i])
             p2.plot(gdata[:,[0,1]], pen=colors[i])
+            if pt.child('Devices', 'Mean plot').value():
+                p2.plot(mdata, pen=mean_colors[i])
         if pt.child('Devices', t['deviceid'] + " (" + t['devicename'] + ")", 'Vbat Plot, ' + str(i)).value():
             p1ybis.addItem(pg.PlotCurveItem(gdata[:,0], gdata[:,2], pen = vbat_colors[i]))
             p2ybis.addItem(pg.PlotCurveItem(gdata[:,0], gdata[:,2], pen = vbat_colors[i]))
@@ -1147,6 +1166,8 @@ def update_display():
             # we do not want to acces t.data outside of the lock
             databufs[i]['gdata'] = np.empty_like(t.data)
             databufs[i]['gdata'][:] = t.data
+            databufs[i]['mdata'] = np.empty_like(t.meandata)
+            databufs[i]['mdata'][:] = t.meandata
         data_thread_lock.release()
         ti_cp = time.time()
 
@@ -1163,7 +1184,17 @@ def update_display():
     pt.child('Capture control', 'Samples per second', 'Total samples').setValue(total_freqs)
 
 if (args.load):
-    pt.restoreState(dispvars['ptree'], addChildren=False, blockSignals=False)
+    # block signals when restoring as restore generates events that trigger display updates, which may fail
+    # if missing entries have not been added yet (like backward compatibiltiy added parameters)
+    pt.restoreState(dispvars['ptree'], addChildren=False, blockSignals=True)
+    # Check for backward compatibility params and add them if missing
+    try:
+        pt.child('Devices', 'Mean plot')
+    except:
+        if args.verbose >= 1:
+            print "Creating deactivated 'Mean plot' entry (loaded file does not contain mean values)"
+        # entry not found, create one with fixed disabled value
+        pt.child('Devices').addChild({'name': 'Mean plot', 'type': 'bool', 'value': False, 'readonly': True})
     updateplots()
     region.setRegion(dispvars['zoom range'])
     win.setWindowTitle("ACME Power Audit - offline mode")
